@@ -1,0 +1,19 @@
+[package]
+name = "chronograph-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Слой хранилища DuckDB: схема (раздел 7 ТЗ), запись сырых данных, инкрементальный кэш по head_sha."
+
+[dependencies]
+chronograph-core.workspace = true
+duckdb.workspace = true
+
+[dev-dependencies]
+# Тест воспроизводимости гоняет полный пайплайн run_analysis(GitSource, DuckStore).
+# Зависимость только для тестов — продуктовый граф (metrics НЕ зависит от git и т.п.)
+# не нарушается.
+chronograph-git.workspace = true
+tempfile = "3"

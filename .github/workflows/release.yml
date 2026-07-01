@@ -1,0 +1,45 @@
+name: release
+
+# Собирает прекомпилированный бинарь и публикует его в GitHub Release при пуше
+# тега v*. На старте — только Linux x86_64 (осознанное сужение, см. CONTEXT.md).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release -p chronograph-cli
+
+      - name: Package + checksum
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          TARGET="x86_64-unknown-linux-gnu"
+          ASSET="chronograph-${VERSION}-${TARGET}.tar.gz"
+          mkdir -p dist
+          cp target/release/chronograph dist/chronograph
+          tar -C dist -czf "${ASSET}" chronograph
+          sha256sum "${ASSET}" > "${ASSET}.sha256"
+          echo "ASSET=${ASSET}" >> "${GITHUB_ENV}"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256

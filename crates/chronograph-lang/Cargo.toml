@@ -1,0 +1,19 @@
+[package]
+name = "chronograph-lang"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Интеграция tree-sitter и подсчёт complexity по языкам (JS/TS, Python, Go, Rust)."
+
+# Чистая утилита: tree-sitter + грамматики. Без gix/store/core — на вход подаются
+# уже прочитанные байты исходника, наружу отдаётся complexity. Сложность считается
+# обходом AST, а не регэкспами (принцип 2.3 ТЗ).
+[dependencies]
+tree-sitter.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true

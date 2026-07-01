@@ -1,0 +1,21 @@
+[package]
+name = "chronograph-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Генерация self-contained HTML-репорта (встроенные ассеты, ноль CDN)."
+
+# Репорт — потребитель материализованных таблиц (ТЗ §4.3): читает file_metrics/
+# coupling из стора и рендерит один self-contained report.html. Без metrics/gix.
+[dependencies]
+chronograph-core.workspace = true
+chronograph-store.workspace = true
+duckdb.workspace = true
+
+[dev-dependencies]
+# Тест байт-идентичности гоняет полный путь: analyze → materialize → render.
+chronograph-git.workspace = true
+chronograph-metrics.workspace = true
+tempfile = "3"

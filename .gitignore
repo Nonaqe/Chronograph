@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+# кэш анализа Chronograph
+/.chronograph/
+*.duckdb
+*.duckdb.wal

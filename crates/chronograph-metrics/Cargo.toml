@@ -1,0 +1,25 @@
+[package]
+name = "chronograph-metrics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Метрики: churn, coupling, knowledge, hotspot. Каждая — отдельный модуль."
+
+# ВАЖНО (CLAUDE.md): metrics НЕ зависит от chronograph-git — работает с данными
+# из стора. duckdb нужен, чтобы читать/агрегировать через соединение стора.
+[dependencies]
+chronograph-core.workspace = true
+chronograph-store.workspace = true
+chronograph-lang.workspace = true
+duckdb.workspace = true
+
+[dev-dependencies]
+# Тесты гоняют полный пайплайн: build fixture (git CLI) → analyze → метрики.
+chronograph-git.workspace = true
+tempfile = "3"
+
+[[example]]
+name = "churn"
+path = "examples/churn.rs"

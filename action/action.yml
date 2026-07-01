@@ -1,0 +1,52 @@
+name: 'Chronograph report'
+description: 'Генерирует self-contained HTML-репорт эволюции кодовой базы (hotspots + change coupling).'
+author: 'Chronograph'
+branding:
+  icon: 'activity'
+  color: 'orange'
+
+inputs:
+  path:
+    description: 'Путь к git-репозиторию для анализа.'
+    required: false
+    default: '.'
+  output:
+    description: 'Куда записать HTML-репорт.'
+    required: false
+    default: 'chronograph-report.html'
+  version:
+    description: 'Версия бинаря chronograph (по умолчанию пинится к релизу этого Action).'
+    required: false
+    default: ''
+  upload-artifact:
+    description: 'Загрузить отчёт как artifact (true/false).'
+    required: false
+    default: 'true'
+
+outputs:
+  report:
+    description: 'Путь к сгенерированному HTML-репорту.'
+    value: ${{ inputs.output }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download, verify and run chronograph
+      shell: bash
+      run: '${{ github.action_path }}/download-and-run.sh'
+      env:
+        CHRONOGRAPH_INPUT_PATH: ${{ inputs.path }}
+        CHRONOGRAPH_OUTPUT: ${{ inputs.output }}
+        CHRONOGRAPH_VERSION_INPUT: ${{ inputs.version }}
+        # Пин: равен git-тегу релиза этого Action. Бампается при каждом релизе.
+        CHRONOGRAPH_DEFAULT_VERSION: 'v0.1.0'
+        # Upstream-репозиторий, из релизов которого качаются бинарники.
+        CHRONOGRAPH_REPO: 'chronograph/chronograph'
+
+    - name: Upload report artifact
+      if: ${{ success() && inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: chronograph-report
+        path: ${{ inputs.output }}
+        if-no-files-found: error

@@ -1,0 +1,24 @@
+[package]
+name = "chronograph-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Бинарь `chronograph` — верхний потребитель ядра."
+
+[[bin]]
+name = "chronograph"
+path = "src/main.rs"
+
+# Верхний потребитель: связывает ядро с конкретными реализациями.
+# report подключится на Этапе 3.
+# Ошибки CLI — через anyhow (.context), правило CLAUDE.md.
+[dependencies]
+chronograph-core.workspace = true
+chronograph-git.workspace = true
+chronograph-store.workspace = true
+chronograph-metrics.workspace = true
+chronograph-report.workspace = true
+clap.workspace = true
+anyhow.workspace = true

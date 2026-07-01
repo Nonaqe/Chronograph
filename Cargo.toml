@@ -1,0 +1,48 @@
+# Chronograph — cargo workspace.
+# Версии зависимостей пинятся здесь и подключаются в крейтах через `workspace = true`.
+# gix — pre-1.0, bump'ается осознанно (см. CONTEXT.md и skill gix-patterns).
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/chronograph/chronograph"
+
+[workspace.dependencies]
+# --- внутренние крейты ---
+chronograph-core = { path = "crates/chronograph-core" }
+chronograph-git = { path = "crates/chronograph-git" }
+chronograph-lang = { path = "crates/chronograph-lang" }
+chronograph-metrics = { path = "crates/chronograph-metrics" }
+chronograph-store = { path = "crates/chronograph-store" }
+chronograph-report = { path = "crates/chronograph-report" }
+
+# --- внешние ---
+# gix запинен на 0.85 (skill gix-patterns писался под 0.84) — bump залогирован в CONTEXT.md.
+# basic = blob-diff + revision + index (обход истории и diff); sha1 — бэкенд хэша
+# (обязателен, иначе gix-hash::Kind пуст); max-performance-safe — perf на чистом Rust
+# (принцип 2.2); parallel — Send-структуры для будущего rayon. Heavy `extras`
+# (mailmap/blame) сознательно НЕ включаем до Этапа 4.
+gix = { version = "0.85", default-features = false, features = ["basic", "max-performance-safe", "sha1", "parallel"] }
+# DuckDB компилируется из исходников (bundled) — self-contained, без системной либы.
+duckdb = { version = "1", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+globset = "0.4"
+# tree-sitter: ядро + грамматики. Крейты нестабильны между минорами (как gix) —
+# пин осознанный, сигнатуры сверены по docs.rs (см. CONTEXT.md «On version upgrades»).
+tree-sitter = "0.26"
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-go = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+thiserror = "2"
+anyhow = "1"
+rayon = "1"
+
+[profile.release]
+lto = "thin"

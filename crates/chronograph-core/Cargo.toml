@@ -1,0 +1,12 @@
+[package]
+name = "chronograph-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Модель данных, конфиг, оркестрация и общие трейты Chronograph."
+
+# core НЕ тянет тяжёлые зависимости (gix/tree-sitter/duckdb) — только модель и трейты.
+[dependencies]
+thiserror.workspace = true
