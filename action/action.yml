@@ -33,7 +33,7 @@ runs:
   steps:
     - name: Download, verify and run chronograph
       shell: bash
-      run: '${{ github.action_path }}/download-and-run.sh'
+      run: 'bash ${{ github.action_path }}/download-and-run.sh'
       env:
         CHRONOGRAPH_INPUT_PATH: ${{ inputs.path }}
         CHRONOGRAPH_OUTPUT: ${{ inputs.output }}
