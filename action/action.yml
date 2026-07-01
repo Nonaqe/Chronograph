@@ -41,7 +41,7 @@ runs:
         # Пин: равен git-тегу релиза этого Action. Бампается при каждом релизе.
         CHRONOGRAPH_DEFAULT_VERSION: 'v0.1.0'
         # Upstream-репозиторий, из релизов которого качаются бинарники.
-        CHRONOGRAPH_REPO: 'chronograph/chronograph'
+        CHRONOGRAPH_REPO: 'Nonaqe/Chronograph'
 
     - name: Upload report artifact
       if: ${{ success() && inputs.upload-artifact == 'true' }}
