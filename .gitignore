@@ -4,3 +4,9 @@
 /.chronograph/
 *.duckdb
 *.duckdb.wal
+
+# Внутренние рабочие файлы (Claude / ТЗ / контекст / скиллы) — не часть проекта
+/.claude/
+/CLAUDE.md
+/CONTEXT.md
+/chronograph-tz.md
