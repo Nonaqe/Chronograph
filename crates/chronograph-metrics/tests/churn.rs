@@ -203,3 +203,35 @@ fn churn_is_deterministic() {
     let b = analyze_and_churn(dir.path(), Some(5), &ChurnConfig::default());
     assert_eq!(a, b);
 }
+
+#[test]
+fn name_reuse_in_single_commit_is_alive_and_stable() {
+    // Регресс (ловилось на clap): в ОДНОМ коммите имя умирает и возрождается —
+    // D(a.txt) + R(c.txt -> a.txt). Обе строки коммита мапятся на один canonical
+    // с РАВНЫМИ (ts, sha); без полного тай-брейка row_number зависел от порядка
+    // скана DuckDB и is_alive флипал между прогонами. Семантика: файл ЖИВ.
+    let dir = TempDir::new().unwrap();
+    let p = dir.path();
+    git(p, &["init", "-q", "-b", "main"]);
+
+    write(p, "a.txt", "old incarnation\n");
+    write(p, "c.txt", "future a\nline2\nline3\n");
+    git(p, &["add", "."]);
+    git(p, &["commit", "-q", "-m", "c1"]);
+
+    // Один коммит: удалить a.txt и переименовать c.txt в a.txt.
+    std::fs::remove_file(p.join("a.txt")).unwrap();
+    std::fs::rename(p.join("c.txt"), p.join("a.txt")).unwrap();
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "c2-kill-and-rebirth"]);
+
+    // Многократные прогоны: is_alive стабильно true (не флипает).
+    for i in 0..10 {
+        let rows = analyze_and_churn(p, None, &ChurnConfig::default());
+        let a = find(&rows, "a.txt").expect("canonical a.txt есть");
+        assert!(
+            a.is_alive,
+            "прогон {i}: файл жив (возрождён в том же коммите)"
+        );
+    }
+}

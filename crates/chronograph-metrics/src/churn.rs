@@ -80,9 +80,17 @@ pub fn compute_churn(store: &DuckStore, cfg: &ChurnConfig) -> Result<Vec<FileChu
 
     // Окна как count(DISTINCT CASE WHEN ...) — переносимый SQL без INTERVAL.
     // is_alive — тип последнего по времени изменения канонического пути.
+    //
+    // Тай-брейк last_change ПОЛНЫЙ: при склейке имён (rename + переиспользование)
+    // несколько строк ОДНОГО коммита мапятся на один canonical — (ts, sha) равны,
+    // и порядок скана DuckDB недетерминирован (ловилось на clap: is_alive флипал
+    // между прогонами). При равных (ts, sha) не-'D' выигрывает (имя умерло и
+    // возродилось в одном коммите → файл жив), затем change_type и сырой путь —
+    // до полной уникальности.
     let sql = format!(
         "WITH mapped AS (
              SELECT pm.canonical AS path,
+                    fc.path AS raw_path,
                     fc.sha AS sha,
                     fc.added AS added,
                     fc.deleted AS deleted,
@@ -105,7 +113,10 @@ pub fn compute_churn(store: &DuckStore, cfg: &ChurnConfig) -> Result<Vec<FileChu
          ),
          last_change AS (
              SELECT path, change_type,
-                    row_number() OVER (PARTITION BY path ORDER BY ts DESC, sha DESC) AS rn
+                    row_number() OVER (PARTITION BY path
+                        ORDER BY ts DESC, sha DESC,
+                                 CASE WHEN change_type = 'D' THEN 1 ELSE 0 END,
+                                 change_type, raw_path) AS rn
              FROM mapped
          )
          SELECT a.path, a.churn_total, a.churn_recent, a.churn_mid, a.churn_long,

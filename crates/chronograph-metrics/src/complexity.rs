@@ -102,8 +102,12 @@ pub fn compute_complexity<R: BlobReader>(
 /// Механический фильтр НЕ применяется — текущее состояние файла определяется
 /// фактически последним изменением, каким бы ни был коммит.
 fn query_head_blobs(conn: &Connection) -> Result<Vec<(String, String)>> {
+    // Тай-брейк ПОЛНЫЙ (как в churn/paths): при склейке имён несколько строк одного
+    // коммита мапятся на один canonical — (ts, sha) равны; не-'D' выигрывает, далее
+    // change_type и сырой путь (иначе blob_sha текущего состояния недетерминирован).
     let sql = "WITH mapped AS (
-                   SELECT pm.canonical AS path, fc.change_type, fc.blob_sha,
+                   SELECT pm.canonical AS path, fc.path AS raw_path,
+                          fc.change_type, fc.blob_sha,
                           CAST(epoch(c.committed_at) AS BIGINT) AS ts, fc.sha AS sha
                    FROM file_changes fc
                    JOIN commits c ON fc.sha = c.sha
@@ -111,7 +115,10 @@ fn query_head_blobs(conn: &Connection) -> Result<Vec<(String, String)>> {
                ),
                ranked AS (
                    SELECT path, change_type, blob_sha,
-                          row_number() OVER (PARTITION BY path ORDER BY ts DESC, sha DESC) AS rn
+                          row_number() OVER (PARTITION BY path
+                              ORDER BY ts DESC, sha DESC,
+                                       CASE WHEN change_type = 'D' THEN 1 ELSE 0 END,
+                                       change_type, raw_path) AS rn
                    FROM mapped
                )
                SELECT path, blob_sha FROM ranked

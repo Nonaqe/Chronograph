@@ -25,9 +25,11 @@ chronograph-report = { path = "crates/chronograph-report" }
 # gix запинен на 0.85 (skill gix-patterns писался под 0.84) — bump залогирован в CONTEXT.md.
 # basic = blob-diff + revision + index (обход истории и diff); sha1 — бэкенд хэша
 # (обязателен, иначе gix-hash::Kind пуст); max-performance-safe — perf на чистом Rust
-# (принцип 2.2); parallel — Send-структуры для будущего rayon. Heavy `extras`
-# (mailmap/blame) сознательно НЕ включаем до Этапа 4.
-gix = { version = "0.85", default-features = false, features = ["basic", "max-performance-safe", "sha1", "parallel"] }
+# (принцип 2.2); parallel — Send-структуры для будущего rayon. blame + mailmap —
+# ВКЛЮЧЕНЫ на Этапе 4 (knowledge/bus factor): blame даёт построчную атрибуцию,
+# mailmap схлопывает несколько email одного человека (§3.5 ТЗ). Сигнатуры сверены
+# по docs.rs для gix 0.85 / gix-blame 0.15 (см. CONTEXT.md «On version upgrades»).
+gix = { version = "0.85", default-features = false, features = ["basic", "max-performance-safe", "sha1", "parallel", "blame", "mailmap"] }
 # DuckDB компилируется из исходников (bundled) — self-contained, без системной либы.
 duckdb = { version = "1", features = ["bundled"] }
 clap = { version = "4", features = ["derive"] }
@@ -43,6 +45,12 @@ tree-sitter-typescript = "0.23"
 thiserror = "2"
 anyhow = "1"
 rayon = "1"
+# JSON-экспорт (§4.1/§6.1): serde-структуры с фикс. порядком полей + serde_json —
+# детерминированная сериализация (Vec отсортированы SQL'ем, float — ryu shortest).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Снапшот-тесты JSON-экспорта (ТЗ §10 / CLAUDE.md «insta для JSON-экспорта»).
+insta = "1"
 
 [profile.release]
 lto = "thin"

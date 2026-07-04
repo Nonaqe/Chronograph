@@ -6,19 +6,25 @@
 //! (CLAUDE.md). Содержимое файлов для complexity приходит через трейт
 //! [`chronograph_core::BlobReader`] — байты на вход, gix здесь не фигурирует.
 
+pub mod age;
+mod blame_cache;
 pub mod churn;
 pub mod complexity;
 pub mod config;
 pub mod coupling;
 pub mod hotspot;
+pub mod knowledge;
 pub mod materialize;
 mod paths;
 
+pub use age::{compute_age, AgeReport, FileAge};
+pub use blame_cache::{BlameSkip, SkipReason};
 pub use churn::{compute_churn, FileChurn};
 pub use complexity::{compute_complexity, FileComplexityRow};
-pub use config::ChurnConfig;
+pub use config::{ChurnConfig, KnowledgeConfig, DEFAULT_BLAME_BUDGET};
 pub use coupling::{compute_coupling, Coupling, CouplingConfig};
 pub use hotspot::{compute_hotspots, ChurnWindow, Hotspot, HotspotConfig};
+pub use knowledge::{compute_knowledge, AuthorOwnership, FileKnowledge, KnowledgeReport};
 pub use materialize::{materialize, MaterializeConfig, MaterializeSummary};
 
 use chronograph_core::error::BoxError;

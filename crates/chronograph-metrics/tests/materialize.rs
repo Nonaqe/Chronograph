@@ -126,6 +126,56 @@ fn coupling_populated() {
 }
 
 #[test]
+fn knowledge_populated() {
+    let repo = build_fixture();
+    let tmp = TempDir::new().unwrap();
+    let store = setup(repo.path(), &tmp.path().join("c.duckdb"));
+
+    // Один автор фикстуры → каждый файл принадлежит ему целиком.
+    // module_bus_factor: 2 файла, все bus_factor=1, top_owner_ratio=1.0.
+    assert_eq!(scalar(&store, "SELECT count(*) FROM module_bus_factor"), 2);
+    assert_eq!(
+        scalar(
+            &store,
+            "SELECT count(*) FROM module_bus_factor WHERE bus_factor=1 AND top_owner_ratio=1.0"
+        ),
+        2
+    );
+    // knowledge: по одной паре (файл, автор) на файл.
+    assert_eq!(scalar(&store, "SELECT count(*) FROM knowledge"), 2);
+    assert_eq!(
+        scalar(&store, "SELECT count(DISTINCT author_id) FROM knowledge"),
+        1
+    );
+    // knowledge_meta: счётчик пропущенных blame (фикстура ничего не роняет → 0).
+    assert_eq!(
+        scalar(&store, "SELECT blame_skipped FROM knowledge_meta"),
+        0
+    );
+}
+
+#[test]
+fn file_age_populated_from_shared_blame() {
+    let repo = build_fixture();
+    let tmp = TempDir::new().unwrap();
+    let store = setup(repo.path(), &tmp.path().join("c.duckdb"));
+
+    // 2 файла. Все коммиты фикстуры на одну дату → anchor == время коммитов →
+    // возраст всех строк 0 (median/newest/oldest = 0).
+    assert_eq!(scalar(&store, "SELECT count(*) FROM file_age"), 2);
+    assert_eq!(
+        scalar(
+            &store,
+            "SELECT count(*) FROM file_age \
+             WHERE newest_age_days=0 AND median_age_days=0 AND oldest_age_days=0"
+        ),
+        2
+    );
+    // lines проставлены (a.rs — одна строка кода).
+    assert!(scalar(&store, "SELECT sum(lines) FROM file_age") >= 2);
+}
+
+#[test]
 fn materialize_is_idempotent() {
     let repo = build_fixture();
     let tmp = TempDir::new().unwrap();
@@ -136,6 +186,9 @@ fn materialize_is_idempotent() {
     materialize(&store, &src, &MaterializeConfig::default()).unwrap();
     assert_eq!(scalar(&store, "SELECT count(*) FROM file_metrics"), 2);
     assert_eq!(scalar(&store, "SELECT count(*) FROM coupling"), 1);
+    assert_eq!(scalar(&store, "SELECT count(*) FROM knowledge"), 2);
+    assert_eq!(scalar(&store, "SELECT count(*) FROM module_bus_factor"), 2);
+    assert_eq!(scalar(&store, "SELECT count(*) FROM file_age"), 2);
 }
 
 #[test]
@@ -153,6 +206,10 @@ fn dump(store: &DuckStore) -> String {
     for (table, order, ncols) in [
         ("file_metrics", "path", 9usize),
         ("coupling", "path_a, path_b", 5),
+        ("knowledge", "path, author_id", 3),
+        ("module_bus_factor", "module", 3),
+        ("knowledge_meta", "blame_skipped", 1),
+        ("file_age", "path", 6),
     ] {
         out.push_str(&format!("== {table} ==\n"));
         let sql = format!("SELECT * FROM {table} ORDER BY {order}");

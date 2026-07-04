@@ -33,3 +33,40 @@ impl Default for ChurnConfig {
         }
     }
 }
+
+/// Конфигурация knowledge / bus factor (§3.5 ТЗ).
+#[derive(Debug, Clone, PartialEq)]
+pub struct KnowledgeConfig {
+    /// Доля знаний, которую должны покрыть авторы, чтобы задать bus factor.
+    ///
+    /// bus_factor = минимальное число топ-владельцев, чья суммарная доля СТРОГО
+    /// превышает этот порог. Дефолт `0.5` — прямо из §3.5 ТЗ («> 50% знаний о
+    /// модуле»). Конфигурируем: CLAUDE.md запрещает зашивать пороги константой.
+    pub bus_factor_threshold: f64,
+    /// Бюджет blame на файл, см. [`DEFAULT_BLAME_BUDGET`]. `0` — безлимит.
+    pub blame_budget: u64,
+}
+
+impl Default for KnowledgeConfig {
+    fn default() -> Self {
+        KnowledgeConfig {
+            bus_factor_threshold: 0.5,
+            blame_budget: DEFAULT_BLAME_BUDGET,
+        }
+    }
+}
+
+/// Бюджет стоимости blame одного файла: `cost = revisions × total_added`.
+///
+/// Файлы дороже бюджета НЕ блеймятся (выпадают из knowledge/age) и ЯВНО
+/// учитываются с причиной — в счётчике «blame skipped» и списке пропусков отчёта.
+/// Зачем: blame одного гигантского частопеременного файла (CHANGELOG 1.3МБ × 618
+/// ревизий) неделим и жуёт 30+ минут в одном потоке; кэш не спасает — такой файл
+/// меняется чаще всех и инвалидируется почти каждым коммитом.
+///
+/// Дефолт 10M выбран ПО ДАННЫМ (OmniRoute, 2026-07-02): нормальный код —
+/// cost < 1M (p99 файлов = 15k added × десятки ревизий), патологические
+/// генерируемые гиганты — cost > 30M (package-lock 64M, CHANGELOG 37M, i18n 32M);
+/// 10M режет разрыв с запасом ×10 в обе стороны. На ripgrep не отсекает ничего
+/// (max ≈ 1M). Конфигурируемо (`--blame-budget`); `0` = безлимит.
+pub const DEFAULT_BLAME_BUDGET: u64 = 10_000_000;

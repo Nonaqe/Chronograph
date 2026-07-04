@@ -93,4 +93,19 @@ fn report_is_self_contained_and_has_content() {
     assert!(html.contains("Change coupling"));
     // Пара a.rs↔b.rs (support 6 ≥ min_support 5) в таблице.
     assert!(html.contains("b.rs"));
+
+    // Секция Knowledge/Bus factor есть и АНОНИМИЗИРОВАНА: ярлык Author #N, а имя
+    // автора фикстуры («Fixture Author») НЕ утекает (принцип 2.4).
+    assert!(html.contains("bus factor"));
+    assert!(html.contains("Author #1"));
+    assert!(
+        !html.contains("Fixture Author"),
+        "имя автора не должно попадать в публичный отчёт"
+    );
+    // Счётчик пропущенных blame — карточка в Overview (фикстура ничего не роняет → 0).
+    assert!(html.contains("blame skipped"));
+
+    // Секция code age с гистограммой (≥2 <svg>: treemap + возраст).
+    assert!(html.contains("Code age"));
+    assert!(html.matches("<svg").count() >= 2);
 }

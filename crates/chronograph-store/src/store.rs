@@ -1,6 +1,6 @@
 //! Реализация [`Store`] поверх DuckDB.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use chronograph_core::error::BoxError;
@@ -75,6 +75,19 @@ CREATE TABLE IF NOT EXISTS module_bus_factor (
     top_owner_ratio REAL
 );
 
+-- code age / stability (§3.6): распределение возраста строк по файлу перцентилями.
+-- Расширение §7 (в исходной схеме нет) — согласовано явно, как old_path/churn_365d/
+-- blob_sha. Возраст в днях от anchor=max(committed_at). «% старше X дней» НЕ храним
+-- (§3.6 не задаёт порог); перцентили — параметр-свободное описание распределения.
+CREATE TABLE IF NOT EXISTS file_age (
+    path            TEXT,
+    lines           INTEGER,
+    newest_age_days INTEGER,
+    median_age_days INTEGER,
+    p90_age_days    INTEGER,
+    oldest_age_days INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS analysis_meta (
     engine_version TEXT,
     config_hash    TEXT,
@@ -83,11 +96,24 @@ CREATE TABLE IF NOT EXISTS analysis_meta (
 );
 "#;
 
+/// Порог промежуточного сброса буферов записи (строк `file_changes`).
+///
+/// Ограничивает пиковую память на гигантских репо; на обычных — один сброс в flush.
+/// Перф-настройка, не семантика: порядок строк сохраняется при любом значении.
+const SPILL_THRESHOLD: usize = 50_000;
+
 /// Хранилище сырых данных истории на DuckDB.
 ///
 /// Внутри одного прогона все записи идут в одной транзакции (производительность +
 /// атомарность): транзакция открывается лениво на первой записи и фиксируется в
 /// [`Store::flush`].
+///
+/// Запись — БАТЧЕМ через `duckdb::Appender` (row-wise INSERT — худший паттерн для
+/// колоночного DuckDB; профилирование показало ~69% времени analyze). Строки
+/// буферизуются в порядке поступления и сбрасываются пачкой — порядок и контент
+/// детерминированы, как при построчной записи. Идемпотентность (бывший
+/// `INSERT OR IGNORE`) обеспечивается in-memory набором известных sha, загружаемым
+/// при открытии (как кэш авторов).
 pub struct DuckStore {
     conn: Connection,
     /// Нормализованный email → author_id (кэш для дедупликации авторов).
@@ -96,6 +122,13 @@ pub struct DuckStore {
     next_author_id: i64,
     /// Открыта ли транзакция прогона.
     in_txn: bool,
+    /// SHA уже записанных коммитов (идемпотентность повторной записи).
+    known_shas: HashSet<String>,
+    /// Буфер строк `commits`: (sha, author_id, committed_at_unix, files, is_mech).
+    pending_commits: Vec<(String, i64, i64, i64, bool)>,
+    /// Буфер строк `file_changes` (колонки в порядке схемы).
+    #[allow(clippy::type_complexity)]
+    pending_changes: Vec<(String, String, Option<String>, i64, i64, String, String)>,
 }
 
 impl DuckStore {
@@ -142,11 +175,26 @@ impl DuckStore {
             }
         }
 
+        // Загрузить sha уже записанных коммитов (идемпотентность батч-записи).
+        let mut known_shas = HashSet::new();
+        {
+            let mut stmt = conn.prepare("SELECT sha FROM commits").map_err(se)?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(se)?;
+            for row in rows {
+                known_shas.insert(row.map_err(se)?);
+            }
+        }
+
         Ok(DuckStore {
             conn,
             authors,
             next_author_id: max_id + 1,
             in_txn: false,
+            known_shas,
+            pending_commits: Vec::new(),
+            pending_changes: Vec::new(),
         })
     }
 
@@ -170,10 +218,11 @@ impl DuckStore {
         let id = self.next_author_id;
         self.next_author_id += 1;
         self.conn
-            .execute(
+            .prepare_cached(
                 "INSERT INTO authors (author_id, canonical_name, canonical_email) VALUES (?, ?, ?)",
-                params![id, name, key],
             )
+            .map_err(se)?
+            .execute(params![id, name, key])
             .map_err(se)?;
         self.authors.insert(key, id);
         Ok(id)
@@ -203,47 +252,42 @@ impl Store for DuckStore {
 
     fn write_commit(&mut self, commit: &Commit, is_mechanical: bool) -> Result<()> {
         self.ensure_txn()?;
-        let author_id = self.author_id(&commit.author.name, &commit.author.email)?;
 
-        // Идемпотентность: если sha уже есть, INSERT OR IGNORE вставит 0 строк —
-        // тогда пропускаем file_changes (они уже записаны прошлым прогоном).
-        let inserted = self
-            .conn
-            .execute(
-                "INSERT OR IGNORE INTO commits \
-                 (sha, author_id, committed_at, files_changed, is_mechanical) \
-                 VALUES (?, ?, ?, ?, ?)",
-                params![
-                    commit.sha,
-                    author_id,
-                    to_timestamp(commit.committed_at),
-                    commit.files_changed() as i64,
-                    is_mechanical
-                ],
-            )
-            .map_err(se)?;
-
-        if inserted == 0 {
+        // Идемпотентность: sha уже записан (этим или прошлым прогоном) → пропускаем
+        // вместе с file_changes. Семантика прежнего INSERT OR IGNORE, но in-memory —
+        // батч-запись через Appender конфликтов не разрешает.
+        if self.known_shas.contains(&commit.sha) {
             return Ok(());
         }
+        let author_id = self.author_id(&commit.author.name, &commit.author.email)?;
+        self.known_shas.insert(commit.sha.clone());
 
+        self.pending_commits.push((
+            commit.sha.clone(),
+            author_id,
+            commit.committed_at,
+            commit.files_changed() as i64,
+            is_mechanical,
+        ));
         for fc in &commit.file_changes {
-            self.conn
-                .execute(
-                    "INSERT INTO file_changes \
-                     (sha, path, old_path, added, deleted, change_type, blob_sha) \
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    params![
-                        commit.sha,
-                        fc.path,
-                        fc.old_path,
-                        fc.added as i64,
-                        fc.deleted as i64,
-                        fc.change_type.code().to_string(),
-                        fc.blob_sha
-                    ],
-                )
-                .map_err(se)?;
+            self.pending_changes.push((
+                commit.sha.clone(),
+                fc.path.clone(),
+                fc.old_path.clone(),
+                fc.added as i64,
+                fc.deleted as i64,
+                fc.change_type.code().to_string(),
+                fc.blob_sha.clone(),
+            ));
+        }
+
+        // Промежуточный сброс — ограничение пиковой памяти на гигантских репо.
+        if self.pending_changes.len() >= SPILL_THRESHOLD {
+            spill(
+                &self.conn,
+                &mut self.pending_commits,
+                &mut self.pending_changes,
+            )?;
         }
         Ok(())
     }
@@ -271,12 +315,54 @@ impl Store for DuckStore {
     }
 
     fn flush(&mut self) -> Result<()> {
+        spill(
+            &self.conn,
+            &mut self.pending_commits,
+            &mut self.pending_changes,
+        )?;
         if self.in_txn {
             self.conn.execute_batch("COMMIT").map_err(se)?;
             self.in_txn = false;
         }
         Ok(())
     }
+}
+
+/// Сбросить буферы записи в DuckDB батчем через `Appender`.
+///
+/// Строки аппендятся в порядке буфера (= порядок вызовов `write_commit`) — контент
+/// таблиц идентичен построчной записи. Порядок append-а на контент строк не влияет
+/// (author_id уже назначен в момент `write_commit`), но сохраняем его для
+/// предсказуемости.
+#[allow(clippy::type_complexity)]
+fn spill(
+    conn: &Connection,
+    commits: &mut Vec<(String, i64, i64, i64, bool)>,
+    changes: &mut Vec<(String, String, Option<String>, i64, i64, String, String)>,
+) -> Result<()> {
+    if !commits.is_empty() {
+        let mut app = conn.appender("commits").map_err(se)?;
+        for (sha, author_id, committed_at, files, mech) in commits.drain(..) {
+            app.append_row(params![
+                sha,
+                author_id,
+                to_timestamp(committed_at),
+                files,
+                mech
+            ])
+            .map_err(se)?;
+        }
+        app.flush().map_err(se)?;
+    }
+    if !changes.is_empty() {
+        let mut app = conn.appender("file_changes").map_err(se)?;
+        for (sha, path, old_path, added, deleted, ct, blob) in changes.drain(..) {
+            app.append_row(params![sha, path, old_path, added, deleted, ct, blob])
+                .map_err(se)?;
+        }
+        app.flush().map_err(se)?;
+    }
+    Ok(())
 }
 
 /// Обернуть ошибку duckdb в ошибку хранилища ядра.

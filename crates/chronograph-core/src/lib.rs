@@ -22,7 +22,7 @@ pub use analyze::{run_analysis, AnalysisOutcome};
 pub use config::Config;
 pub use error::{Error, Result};
 pub use model::{AnalysisMeta, Author, ChangeType, Commit, FileChange};
-pub use source::{BlobReader, CommitSource};
+pub use source::{BlameHunk, BlameSource, BlobReader, CommitSource, FileBlame};
 pub use store::Store;
 
 /// Версия движка, попадающая в `analysis_meta` каждого отчёта (детерминизм).

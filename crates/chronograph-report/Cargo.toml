@@ -13,9 +13,14 @@ description = "Генерация self-contained HTML-репорта (встро
 chronograph-core.workspace = true
 chronograph-store.workspace = true
 duckdb.workspace = true
+# JSON-экспорт (модуль export) — согласованное расширение крейта (5c, CONTEXT.md).
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 # Тест байт-идентичности гоняет полный путь: analyze → materialize → render.
 chronograph-git.workspace = true
 chronograph-metrics.workspace = true
 tempfile = "3"
+# Снапшот схемы JSON-экспорта (ТЗ §10).
+insta.workspace = true

@@ -1,0 +1,230 @@
+---
+source: crates/chronograph-report/tests/export.rs
+expression: "serde_json::to_string_pretty(&value).unwrap()"
+---
+{
+  "blame_skips": [],
+  "coupling": [
+    {
+      "a": "a.rs",
+      "b": "c.rs",
+      "ratio": 1.0,
+      "support": 6
+    }
+  ],
+  "events": [
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "M"
+        },
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "M"
+        }
+      ],
+      "mechanical": false,
+      "sha": "2790fc392022385f513c871d1e18a5608e872bb3",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "M"
+        },
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "M"
+        }
+      ],
+      "mechanical": false,
+      "sha": "3ba9273ddef6a5692ac22b0c50541de66d59a47d",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "M"
+        },
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "M"
+        }
+      ],
+      "mechanical": false,
+      "sha": "5cba00638e6cfb3ebf136e67dc6187a0fde2f300",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 0,
+          "deleted": 0,
+          "old_path": "b.rs",
+          "path": "c.rs",
+          "type": "R"
+        }
+      ],
+      "mechanical": false,
+      "sha": "7634900254ca32fdde572f88a2323b0126c17718",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "M"
+        },
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "M"
+        }
+      ],
+      "mechanical": false,
+      "sha": "78e7088a656bf22f0031b31cbd89db2b35533187",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "M"
+        },
+        {
+          "added": 1,
+          "deleted": 1,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "M"
+        }
+      ],
+      "mechanical": false,
+      "sha": "d8b944f956af742aced821a80d0744b3d4841001",
+      "ts": 1622505600
+    },
+    {
+      "author": "Author #1",
+      "changes": [
+        {
+          "added": 1,
+          "deleted": 0,
+          "old_path": null,
+          "path": "a.rs",
+          "type": "A"
+        },
+        {
+          "added": 1,
+          "deleted": 0,
+          "old_path": null,
+          "path": "b.rs",
+          "type": "A"
+        }
+      ],
+      "mechanical": false,
+      "sha": "f174816d4eaaf6f3f21c66547f6bde2f122dda25",
+      "ts": 1622505600
+    }
+  ],
+  "file_age": [
+    {
+      "lines": 1,
+      "median_age_days": 0,
+      "newest_age_days": 0,
+      "oldest_age_days": 0,
+      "p90_age_days": 0,
+      "path": "a.rs"
+    },
+    {
+      "lines": 1,
+      "median_age_days": 0,
+      "newest_age_days": 0,
+      "oldest_age_days": 0,
+      "p90_age_days": 0,
+      "path": "c.rs"
+    }
+  ],
+  "files": [
+    {
+      "churn_30d": 6,
+      "churn_365d": 6,
+      "churn_90d": 6,
+      "churn_total": 6,
+      "complexity": 3.0,
+      "complexity_per_loc": 3.0,
+      "hotspot_rank": 1,
+      "is_alive": true,
+      "path": "a.rs"
+    },
+    {
+      "churn_30d": 7,
+      "churn_365d": 7,
+      "churn_90d": 7,
+      "churn_total": 7,
+      "complexity": 2.0,
+      "complexity_per_loc": 2.0,
+      "hotspot_rank": 2,
+      "is_alive": true,
+      "path": "c.rs"
+    }
+  ],
+  "knowledge": [
+    {
+      "bus_factor": 1,
+      "path": "a.rs",
+      "top_owner": "Author #1",
+      "top_owner_ratio": 1.0
+    },
+    {
+      "bus_factor": 1,
+      "path": "c.rs",
+      "top_owner": "Author #1",
+      "top_owner_ratio": 1.0
+    }
+  ],
+  "meta": {
+    "anchor_ts": 1622505600,
+    "anonymized": true,
+    "config_hash": "f283ba95ccc573f7",
+    "engine_version": "0.0.0",
+    "head_sha": "7634900254ca32fdde572f88a2323b0126c17718",
+    "schema_version": 1,
+    "total_authors": 1,
+    "total_commits": 7
+  }
+}

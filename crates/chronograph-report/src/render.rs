@@ -22,6 +22,9 @@ pub fn render_html(data: &ReportData) -> String {
     render_overview(&mut s, data);
     render_hotspots(&mut s, data);
     render_coupling(&mut s, data);
+    render_knowledge(&mut s, data);
+    render_blame_skips(&mut s, data);
+    render_age(&mut s, data);
 
     s.push_str("<footer>Chronograph ");
     s.push_str(&esc(&data.overview.engine_version));
@@ -43,6 +46,8 @@ fn render_overview(s: &mut String, data: &ReportData) {
     card(s, "files", &o.total_files.to_string());
     card(s, "hotspots", &o.hotspot_files.to_string());
     card(s, "coupled pairs", &o.coupling_pairs.to_string());
+    card(s, "bus factor = 1", &o.bus_factor_one.to_string());
+    card(s, "blame skipped", &o.blame_skipped.to_string());
     s.push_str("</div>\n<div class=\"meta\">engine <code>");
     s.push_str(&esc(&o.engine_version));
     s.push_str("</code> · config <code>");
@@ -161,7 +166,152 @@ fn render_coupling(s: &mut String, data: &ReportData) {
     s.push_str("</tbody>\n</table>\n</section>\n");
 }
 
+fn render_knowledge(s: &mut String, data: &ReportData) {
+    s.push_str("<section>\n<h2>Knowledge &amp; bus factor — риск концентрации знаний</h2>\n");
+    if data.knowledge.is_empty() {
+        s.push_str("<p class=\"meta\">Нет данных о владении.</p>\n</section>\n");
+        return;
+    }
+    s.push_str("<p class=\"meta\">Файл с bus factor = 1 — риск: знания о нём сосредоточены в одном человеке. Авторы анонимизированы.</p>\n");
+    s.push_str("<table>\n<thead><tr><th class=\"num\">bus factor</th><th class=\"num\">top owner</th><th>owner</th><th>file</th></tr></thead>\n<tbody>\n");
+    // Вход уже отсортирован по риску (bus_factor↑, top_owner_ratio↓, путь).
+    for k in data.knowledge.iter().take(25) {
+        s.push_str("<tr><td class=\"num\">");
+        s.push_str(&k.bus_factor.to_string());
+        s.push_str("</td><td class=\"num\">");
+        s.push_str(&pct(k.top_owner_ratio));
+        s.push_str("</td><td>");
+        s.push_str(&esc(&k.top_owner));
+        s.push_str("</td><td class=\"path\">");
+        s.push_str(&esc(&k.module));
+        s.push_str("</td></tr>\n");
+    }
+    s.push_str("</tbody>\n</table>\n</section>\n");
+}
+
+fn render_blame_skips(s: &mut String, data: &ReportData) {
+    if data.blame_skips.is_empty() {
+        return; // нечего объяснять — секция не показывается
+    }
+    s.push_str("<section>\n<h2>Файлы вне knowledge/age — почему</h2>\n");
+    s.push_str(
+        "<p class=\"meta\">Эти файлы исключены из построчного анализа владения/возраста. \
+         Причина указана для каждого: либо файл непомерно дорог для blame — чаще всего \
+         это генерируемые гиганты (lock-файлы, changelog'и, i18n-бандлы), но бывает и \
+         живой код-долгожитель; порог настраивается флагом --blame-budget — либо на нём \
+         падает gix-blame (известный баг апстрима). Остальные метрики \
+         (churn/coupling/hotspots) по этим файлам посчитаны полностью.</p>\n",
+    );
+    s.push_str("<table>\n<thead><tr><th>file</th><th>причина</th></tr></thead>\n<tbody>\n");
+    for e in data.blame_skips.iter().take(50) {
+        s.push_str("<tr><td class=\"path\">");
+        s.push_str(&esc(&e.path));
+        s.push_str("</td><td>");
+        s.push_str(&esc(&e.reason));
+        s.push_str("</td></tr>\n");
+    }
+    s.push_str("</tbody>\n</table>\n</section>\n");
+}
+
+/// Бакеты возраста (границы в днях, верхняя эксклюзивна). Это ПРЕЗЕНТАЦИОННЫЙ выбор
+/// (как раскладка/цвета treemap), фиксирован ради детерминизма — НЕ порог метрики
+/// (метрика хранит перцентили, §3.6 порога не задаёт).
+const AGE_BUCKETS: &[(&str, i64)] = &[
+    ("<1мес", 30),
+    ("1-3мес", 90),
+    ("3-12мес", 365),
+    ("1-2г", 730),
+    ("2-5л", 1825),
+    ("5л+", i64::MAX),
+];
+const AGE_W: f64 = 940.0;
+const AGE_H: f64 = 260.0;
+
+fn render_age(s: &mut String, data: &ReportData) {
+    s.push_str("<section>\n<h2>Code age — распределение возраста строк</h2>\n");
+    if data.age_medians.is_empty() {
+        s.push_str("<p class=\"meta\">Нет данных о возрасте.</p>\n</section>\n");
+        return;
+    }
+
+    // Файлы по median-возрасту в фикс. бакеты (свежие слева, стабильные справа).
+    let mut counts = vec![0u64; AGE_BUCKETS.len()];
+    for &m in &data.age_medians {
+        let idx = AGE_BUCKETS
+            .iter()
+            .position(|(_, hi)| m < *hi)
+            .unwrap_or(AGE_BUCKETS.len() - 1);
+        counts[idx] += 1;
+    }
+    let max = counts.iter().copied().max().unwrap_or(1).max(1);
+
+    s.push_str("<p class=\"meta\">Файлов по median-возрасту строк: свежепереписанные слева, стабильный старый код справа.</p>\n");
+    s.push_str("<div class=\"treemap\">\n<svg viewBox=\"0 0 ");
+    s.push_str(&n2(AGE_W));
+    s.push(' ');
+    s.push_str(&n2(AGE_H));
+    s.push_str("\" xmlns=\"http://www.w3.org/2000/svg\">\n");
+
+    let n = AGE_BUCKETS.len() as f64;
+    let slot = AGE_W / n;
+    let bar_w = slot * 0.7;
+    let pad = (slot - bar_w) / 2.0;
+    let base_y = AGE_H - 34.0; // место под подписи бакетов
+    let chart_h = base_y - 18.0; // место над столбцом под число
+
+    for (i, ((label, _), &count)) in AGE_BUCKETS.iter().zip(&counts).enumerate() {
+        let fi = i as f64;
+        let x = fi * slot + pad;
+        let h = chart_h * (count as f64 / max as f64);
+        let y = base_y - h;
+        // Цвет: свежие (слева) — насыщенно, старые (справа) — бледно (fresh vs древнее).
+        let t = if n > 1.0 {
+            (n - 1.0 - fi) / (n - 1.0)
+        } else {
+            1.0
+        };
+        let (cr, cg, cb) = churn_color(t);
+
+        s.push_str("<rect x=\"");
+        s.push_str(&n2(x));
+        s.push_str("\" y=\"");
+        s.push_str(&n2(y));
+        s.push_str("\" width=\"");
+        s.push_str(&n2(bar_w));
+        s.push_str("\" height=\"");
+        s.push_str(&n2(h));
+        s.push_str("\" fill=\"rgb(");
+        s.push_str(&format!("{cr},{cg},{cb}"));
+        s.push_str(")\" stroke=\"#fbfaf7\" stroke-width=\"1\"/>\n");
+
+        // Число файлов над столбцом.
+        s.push_str("<text x=\"");
+        s.push_str(&n2(x + bar_w / 2.0));
+        s.push_str("\" y=\"");
+        s.push_str(&n2(y - 5.0));
+        s.push_str("\" text-anchor=\"middle\" font-family=\"ui-monospace, Menlo, Consolas, monospace\" font-size=\"12\" fill=\"#22201c\">");
+        s.push_str(&count.to_string());
+        s.push_str("</text>\n");
+
+        // Подпись бакета под осью.
+        s.push_str("<text x=\"");
+        s.push_str(&n2(x + bar_w / 2.0));
+        s.push_str("\" y=\"");
+        s.push_str(&n2(base_y + 18.0));
+        s.push_str("\" text-anchor=\"middle\" font-family=\"ui-monospace, Menlo, Consolas, monospace\" font-size=\"12\" fill=\"#22201c\">");
+        s.push_str(&esc(label));
+        s.push_str("</text>\n");
+    }
+
+    s.push_str("</svg>\n</div>\n</section>\n");
+}
+
 // --- детерминированные хелперы форматирования ---
+
+/// Доля как целые проценты с фиксированным форматом (детерминизм).
+fn pct(x: f64) -> String {
+    format!("{}%", (x * 100.0).round() as i64)
+}
 
 /// Число с фиксированной точностью (2 знака) — не дефолтный float Display.
 fn n2(x: f64) -> String {
@@ -229,7 +379,7 @@ fn esc(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::{CouplingEntry, Overview};
+    use crate::data::{CouplingEntry, KnowledgeEntry, Overview};
 
     fn sample() -> ReportData {
         ReportData {
@@ -241,6 +391,8 @@ mod tests {
                 total_files: 10,
                 hotspot_files: 2,
                 coupling_pairs: 1,
+                bus_factor_one: 1,
+                blame_skipped: 3,
             },
             hotspots: vec![
                 HotspotEntry {
@@ -261,6 +413,26 @@ mod tests {
                 path_b: "src/b.rs".into(),
                 support: 8,
                 ratio: 0.8,
+            }],
+            knowledge: vec![
+                KnowledgeEntry {
+                    module: "src/a.rs".into(),
+                    bus_factor: 1,
+                    top_owner_ratio: 1.0,
+                    top_owner: "Author #1".into(),
+                },
+                KnowledgeEntry {
+                    module: "src/b.rs".into(),
+                    bus_factor: 2,
+                    top_owner_ratio: 0.5,
+                    top_owner: "Author #2".into(),
+                },
+            ],
+            // Возрасты в разных бакетах: 5 дн (<1мес), 200 дн (3-12мес), 1500 дн (2-5л).
+            age_medians: vec![5, 200, 1500],
+            blame_skips: vec![crate::data::BlameSkipEntry {
+                path: "CHANGELOG.md".into(),
+                reason: "слишком дорог для blame: стоимость 37000000 строко-ревизий > бюджета 10000000 (файл с очень большой историей изменений; поднять: --blame-budget)".into(),
             }],
         }
     }
@@ -289,6 +461,55 @@ mod tests {
         assert!(html.contains("<svg"));
         assert!(html.contains("Change coupling"));
         assert!(html.contains("abcdef123456"));
+        // Счётчик пропущенных blame — карточка в Overview (значение из sample = 3).
+        assert!(html.contains("blame skipped"));
+        assert!(html.contains(">3</div>"));
+    }
+
+    #[test]
+    fn blame_skips_section_shows_reasons() {
+        let html = render_html(&sample());
+        // Секция причин есть, файл назван, причина с числами показана.
+        assert!(html.contains("Файлы вне knowledge/age"));
+        assert!(html.contains("CHANGELOG.md"));
+        assert!(html.contains("слишком дорог для blame"));
+        assert!(html.contains("--blame-budget"), "как поднять — подсказано");
+
+        // Без пропусков секция не рендерится вовсе.
+        let mut clean = sample();
+        clean.blame_skips.clear();
+        let html2 = render_html(&clean);
+        assert!(!html2.contains("Файлы вне knowledge/age"));
+    }
+
+    #[test]
+    fn age_section_renders_histogram() {
+        let html = render_html(&sample());
+        assert!(html.contains("Code age"), "секция возраста есть");
+        // Бакеты как подписи осей.
+        assert!(html.contains("&lt;1мес") || html.contains("<1мес"));
+        assert!(html.contains("2-5л"));
+        // Ещё один <svg> (гистограмма) помимо treemap.
+        assert!(
+            html.matches("<svg").count() >= 2,
+            "treemap + гистограмма возраста"
+        );
+    }
+
+    #[test]
+    fn knowledge_section_is_anonymized_and_risk_first() {
+        let html = render_html(&sample());
+        // Секция есть, анонимные ярлыки — не имена.
+        assert!(html.contains("bus factor"));
+        assert!(html.contains("Author #1"));
+        assert!(html.contains("Author #2"));
+        // Внутри секции Knowledge: риск (bf=1, a.rs) выше bf=2 (b.rs).
+        let sect = &html[html.find("Knowledge").expect("секция есть")..];
+        let pos_a = sect.find("src/a.rs").expect("a.rs в секции");
+        let pos_b = sect.find("src/b.rs").expect("b.rs в секции");
+        assert!(pos_a < pos_b, "риск (bf=1) выше по секции");
+        // Никаких реальных имён не утекает через эту секцию.
+        assert!(!html.contains("David Tolnay"));
     }
 
     #[test]

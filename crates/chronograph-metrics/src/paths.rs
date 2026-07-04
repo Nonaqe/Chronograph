@@ -84,6 +84,90 @@ fn resolve_canonical(start: &str, next: &HashMap<String, (String, i64)>) -> Stri
     cur
 }
 
+/// Мета живого файла на HEAD — для blame-кэша и планирования очереди blame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LivingFile {
+    /// Канонический путь.
+    pub path: String,
+    /// SHA коммита, ПОСЛЕДНИМ изменившего файл — ключ инвалидации blame-кэша:
+    /// файл не менялся → его blame на новом HEAD идентичен прошлому.
+    pub last_sha: String,
+    /// Число ревизий файла в истории — прокси стоимости blame (стоимость ≈
+    /// размер × глубина истории) для largest-first планирования.
+    pub revisions: u64,
+    /// Суммарно добавлено строк за историю — вместе с ревизиями даёт прокси
+    /// стоимости blame (`cost = revisions × total_added`) для blame-бюджета.
+    pub total_added: u64,
+}
+
+impl LivingFile {
+    /// Прокси стоимости blame файла: `revisions × total_added`.
+    ///
+    /// Blame ≈ O(размер × глубина истории); для append-хвостатых файлов
+    /// total_added ≈ размер. Данные-обоснование дефолта бюджета — см.
+    /// [`crate::config::DEFAULT_BLAME_BUDGET`].
+    pub fn blame_cost(&self) -> u64 {
+        self.revisions.saturating_mul(self.total_added)
+    }
+}
+
+/// Живые канонические файлы на HEAD (последнее по времени изменение ≠ удаление),
+/// с метой: sha последнего изменения + число ревизий.
+///
+/// Материализует `path_map`; порядок — по пути. Механический фильтр НЕ применяется:
+/// текущее состояние файла определяется фактически последним изменением. Общий для
+/// knowledge и code age (и blame-кэша).
+pub(crate) fn living_files_meta(conn: &Connection) -> Result<Vec<LivingFile>> {
+    let canonical = build_canonical_map(conn)?;
+    materialize_path_map(conn, &canonical)?;
+
+    // Тай-брейк ПОЛНЫЙ (как в churn/complexity): при склейке имён несколько строк
+    // одного коммита мапятся на один canonical — (ts, sha) равны; не-'D' выигрывает,
+    // далее change_type и сырой путь (иначе живость/last_sha недетерминированы).
+    let sql = "WITH mapped AS (
+                   SELECT pm.canonical AS path,
+                          fc.path AS raw_path,
+                          fc.change_type AS change_type,
+                          CAST(epoch(c.committed_at) AS BIGINT) AS ts,
+                          fc.sha AS sha,
+                          fc.added AS added
+                   FROM file_changes fc
+                   JOIN commits c ON fc.sha = c.sha
+                   JOIN path_map pm ON fc.path = pm.path
+               ),
+               ranked AS (
+                   SELECT path, change_type, sha,
+                          row_number() OVER (PARTITION BY path
+                              ORDER BY ts DESC, sha DESC,
+                                       CASE WHEN change_type = 'D' THEN 1 ELSE 0 END,
+                                       change_type, raw_path) AS rn,
+                          count(*) OVER (PARTITION BY path) AS revisions,
+                          sum(added) OVER (PARTITION BY path) AS total_added
+                   FROM mapped
+               )
+               SELECT path, sha, CAST(revisions AS BIGINT),
+                      CAST(COALESCE(total_added, 0) AS BIGINT)
+               FROM ranked
+               WHERE rn = 1 AND change_type <> 'D'
+               ORDER BY path";
+    let mut stmt = conn.prepare(sql).map_err(se)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(LivingFile {
+                path: r.get(0)?,
+                last_sha: r.get(1)?,
+                revisions: r.get::<_, i64>(2)? as u64,
+                total_added: r.get::<_, i64>(3)? as u64,
+            })
+        })
+        .map_err(se)?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(se)?);
+    }
+    Ok(out)
+}
+
 /// Залить отображение path→canonical во временную таблицу `path_map`.
 pub(crate) fn materialize_path_map(
     conn: &Connection,

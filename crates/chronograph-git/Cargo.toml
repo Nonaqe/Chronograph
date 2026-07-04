@@ -11,6 +11,9 @@ description = "Обход истории git через gix: sha/author/timestam
 chronograph-core.workspace = true
 gix.workspace = true
 globset.workspace = true
+# Параллельный blame по файлам (каждый blame независим). gix ThreadSafeRepository
+# (Send+Sync с фичей parallel) даёт per-thread handle.
+rayon.workspace = true
 
 [dev-dependencies]
 # Фикстуры строятся как временные git-репозитории (только для тестов).
