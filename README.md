@@ -8,7 +8,7 @@ Turn a repository's history into three actionable signals — **hotspots**, **ch
 
 [![CI](https://github.com/Nonaqe/Chronograph/actions/workflows/ci.yml/badge.svg)](https://github.com/Nonaqe/Chronograph/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-workspace-CE422B?logo=rust&logoColor=white)](Cargo.toml)
-[![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
+[![License](https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-blue)](LICENSE)
 
 **English** · [Русский](README.ru.md)
 
@@ -16,7 +16,7 @@ Turn a repository's history into three actionable signals — **hotspots**, **ch
 
 ---
 
-Chronograph is an open‑source engine that reads a git history and computes, deterministically, *where* a codebase is risky and *how* it got that way — without ever scoring individual developers. The core is written in Rust (library + CLI); the primary distribution channel is a **GitHub Action** that produces a single self‑contained HTML report; an optional **web UI** turns the same data into interactive visualizations.
+Chronograph is a source‑available engine that reads a git history and computes, deterministically, *where* a codebase is risky and *how* it got that way — without ever scoring individual developers. The core is written in Rust (library + CLI); the primary distribution channel is a **GitHub Action** that produces a single self‑contained HTML report; an optional **web UI** turns the same data into interactive visualizations.
 
 <div align="center">
 <img src="docs/assets/coupling.png" alt="Change coupling force graph" width="90%">
@@ -153,7 +153,11 @@ The Action downloads a prebuilt binary, verifies its SHA‑256, runs `chronograp
 
 ## License
 
-No `LICENSE` file is committed yet. Add one (e.g. MIT or Apache‑2.0) before wider distribution; the Action's binary‑distribution model assumes a public, open‑source project.
+Licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**.
+
+In plain terms: you may **use, copy, modify, share, and fork Chronograph for free for any noncommercial purpose** — personal projects, study, research, hobby, education, and non‑profit/government use — as long as you keep the `Required Notice` (author attribution) with any copies you distribute. **Commercial use / monetization requires a separate license** from the author. The software is provided "as is", without warranty.
+
+> This is a *source‑available* license, not an OSI‑approved open‑source license (it restricts commercial use). See the [full text](LICENSE).
 
 ---
 
